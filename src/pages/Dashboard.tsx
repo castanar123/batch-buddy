@@ -1,6 +1,7 @@
-import { Package, Leaf, AlertTriangle, Clock, ArrowDown, ArrowUp, TrendingUp } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { Package, AlertTriangle, Clock, TrendingUp, ArrowDown, ArrowUp } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { products, ingredients, alerts, stockMovements, batches } from "@/data/sampleData";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 
 const chartData = [
@@ -13,39 +14,35 @@ const chartData = [
   { day: "SUN", stockIn: 380, stockOut: 350 },
 ];
 
-const statCards = [
-  {
-    title: "TOTAL PRODUCTS",
-    value: "1,284",
-    sub: "+12% this month",
-    icon: Package,
-    subIcon: TrendingUp,
-    highlight: false,
-  },
-  {
-    title: "AVAILABLE STOCK",
-    value: "42,500",
-    sub: "",
-    icon: Package,
-    highlight: true,
-  },
-  {
-    title: "LOW STOCK ITEMS",
-    value: String(ingredients.filter(i => i.currentStock <= i.minStock).length + products.filter(p => p.status === "low-stock").length),
-    sub: "Requires immediate attention",
-    icon: AlertTriangle,
-    highlight: false,
-  },
-  {
-    title: "EXPIRING SOON",
-    value: String(batches.filter(b => b.status === "completed").length + products.filter(p => p.status === "expiring").length),
-    sub: "Within 7 days",
-    icon: Clock,
-    highlight: false,
-  },
-];
-
 const Dashboard = () => {
+  const { data: products = [] } = useQuery({
+    queryKey: ["products"],
+    queryFn: async () => { const { data } = await supabase.from("products").select("*"); return data || []; },
+  });
+  const { data: ingredients = [] } = useQuery({
+    queryKey: ["ingredients"],
+    queryFn: async () => { const { data } = await supabase.from("ingredients").select("*"); return data || []; },
+  });
+  const { data: alerts = [] } = useQuery({
+    queryKey: ["alerts"],
+    queryFn: async () => { const { data } = await supabase.from("alerts").select("*").eq("resolved", false).order("created_at", { ascending: false }); return data || []; },
+  });
+  const { data: movements = [] } = useQuery({
+    queryKey: ["stock_movements"],
+    queryFn: async () => { const { data } = await supabase.from("stock_movements").select("*").order("created_at", { ascending: false }).limit(5); return data || []; },
+  });
+
+  const lowStockCount = ingredients.filter(i => i.current_stock <= i.min_stock).length + products.filter(p => p.status === "low-stock" || p.status === "out-of-stock").length;
+  const expiringCount = products.filter(p => p.status === "expiring").length;
+  const totalStock = products.reduce((sum, p) => sum + p.quantity, 0);
+
+  const statCards = [
+    { title: "TOTAL PRODUCTS", value: products.length.toLocaleString(), sub: "", icon: Package },
+    { title: "AVAILABLE STOCK", value: totalStock.toLocaleString(), sub: "", highlight: true },
+    { title: "LOW STOCK ITEMS", value: String(lowStockCount), sub: lowStockCount > 0 ? "Requires attention" : "All good", icon: AlertTriangle },
+    { title: "EXPIRING SOON", value: String(expiringCount), sub: "Within 7 days", icon: Clock },
+  ];
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div>
@@ -53,26 +50,19 @@ const Dashboard = () => {
         <p className="text-muted-foreground mt-1">Real-time status of Elline Food Products Stock.</p>
       </div>
 
-      {/* Stat Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {statCards.map((card, i) => (
           <Card key={i} className={card.highlight ? "bg-secondary border-secondary" : "bg-card"}>
             <CardContent className="p-5">
               <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{card.title}</p>
               <p className="text-3xl font-bold font-heading text-foreground mt-2">{card.value}</p>
-              {card.sub && (
-                <p className="text-sm text-muted-foreground mt-1 flex items-center gap-1">
-                  {card.subIcon && <card.subIcon className="h-3 w-3 text-success" />}
-                  {card.sub}
-                </p>
-              )}
+              {card.sub && <p className="text-sm text-muted-foreground mt-1">{card.sub}</p>}
             </CardContent>
           </Card>
         ))}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Chart */}
         <Card className="lg:col-span-2">
           <CardHeader>
             <CardTitle className="font-heading text-lg">Stock Movement Trend</CardTitle>
@@ -85,13 +75,7 @@ const Dashboard = () => {
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                   <XAxis dataKey="day" stroke="hsl(var(--muted-foreground))" fontSize={12} />
                   <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: "hsl(var(--card))",
-                      border: "1px solid hsl(var(--border))",
-                      borderRadius: "8px",
-                    }}
-                  />
+                  <Tooltip contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px" }} />
                   <Legend />
                   <Line type="monotone" dataKey="stockIn" stroke="hsl(var(--primary))" strokeWidth={2} name="Stock In" dot={false} />
                   <Line type="monotone" dataKey="stockOut" stroke="hsl(var(--secondary))" strokeWidth={2} name="Stock Out" dot={false} />
@@ -101,29 +85,27 @@ const Dashboard = () => {
           </CardContent>
         </Card>
 
-        {/* Recent Activity */}
         <Card>
           <CardHeader>
             <div className="flex justify-between items-center">
               <CardTitle className="font-heading text-lg">Recent Activity</CardTitle>
-              <button className="text-xs text-primary font-semibold hover:underline">View All</button>
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
-            {stockMovements.slice(0, 4).map((m) => (
+            {movements.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No recent activity.</p>
+            ) : movements.map((m) => (
               <div key={m.id} className="flex items-start gap-3">
                 <div className={`h-8 w-8 rounded-full flex items-center justify-center shrink-0 ${
                   m.type === "IN" ? "bg-success/10 text-success" : m.type === "OUT" ? "bg-destructive/10 text-destructive" : "bg-warning/10 text-warning"
                 }`}>
-                  {m.type === "IN" ? <ArrowDown className="h-4 w-4" /> : m.type === "OUT" ? <ArrowUp className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}
+                  {m.type === "IN" ? <ArrowDown className="h-4 w-4" /> : <ArrowUp className="h-4 w-4" />}
                 </div>
                 <div className="min-w-0">
-                  <p className="text-sm font-medium text-foreground truncate">
-                    {m.type === "IN" ? "New Stock Arrival" : m.type === "OUT" ? "Stock Dispatched" : "Adjustment"}
-                  </p>
+                  <p className="text-sm font-medium text-foreground truncate">{m.item_name}</p>
                   <p className="text-xs text-muted-foreground truncate">{m.remarks}</p>
                   <p className="text-[10px] uppercase text-muted-foreground mt-1">
-                    {new Date(m.date).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                    {new Date(m.created_at).toLocaleString()}
                   </p>
                 </div>
               </div>
@@ -132,26 +114,25 @@ const Dashboard = () => {
         </Card>
       </div>
 
-      {/* Alerts */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="font-heading text-lg flex items-center gap-2">
-            <AlertTriangle className="h-5 w-5 text-warning" />
-            Active Alerts
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-3">
-            {alerts.map((a) => (
-              <div key={a.id} className={`flex items-center gap-3 p-3 rounded-lg ${a.urgent ? "bg-destructive/5 border border-destructive/20" : "bg-warning/5 border border-warning/20"}`}>
-                <AlertTriangle className={`h-4 w-4 shrink-0 ${a.urgent ? "text-destructive" : "text-warning"}`} />
-                <p className="text-sm text-foreground flex-1">{a.message}</p>
-                <span className="text-xs text-muted-foreground shrink-0">{a.date}</span>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+      {alerts.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="font-heading text-lg flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-warning" /> Active Alerts
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {alerts.map((a) => (
+                <div key={a.id} className={`flex items-center gap-3 p-3 rounded-lg ${a.urgent ? "bg-destructive/5 border border-destructive/20" : "bg-warning/5 border border-warning/20"}`}>
+                  <AlertTriangle className={`h-4 w-4 shrink-0 ${a.urgent ? "text-destructive" : "text-warning"}`} />
+                  <p className="text-sm text-foreground flex-1">{a.message}</p>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 };

@@ -30,7 +30,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
                 <span className="absolute -top-1 -right-1 h-4 w-4 bg-destructive text-destructive-foreground text-[10px] font-bold rounded-full flex items-center justify-center">3</span>
               </button>
               <div className="flex items-center gap-2">
-                <span className="text-sm font-medium text-foreground hidden sm:block">{user?.username || "Admin"}</span>
+                <span className="text-sm font-medium text-foreground hidden sm:block">{user?.user_metadata?.username || user?.email || "Admin"}</span>
                 <div className="h-9 w-9 rounded-full bg-muted flex items-center justify-center">
                   <User className="h-5 w-5 text-muted-foreground" />
                 </div>
