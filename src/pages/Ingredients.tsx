@@ -10,6 +10,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import type { Tables } from "@/integrations/supabase/types";
+import { logAuditAction } from "@/lib/audit";
+import { useAuth } from "@/contexts/AuthContext";
 
 type Ingredient = Tables<"ingredients">;
 type Supplier = Tables<"suppliers">;
@@ -23,6 +25,7 @@ const Ingredients = () => {
   const [form, setForm] = useState(emptyForm);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const queryClient = useQueryClient();
+  const { user } = useAuth();
 
   const { data: ingredients = [], isLoading } = useQuery({
     queryKey: ["ingredients"],
@@ -52,11 +55,16 @@ const Ingredients = () => {
         if (error) throw error;
       }
     },
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["ingredients"] });
       setModalOpen(false);
       setEditing(null);
       setForm(emptyForm);
+      const action = variables.id ? "UPDATE" : "CREATE";
+      const details = variables.id
+        ? `Updated ingredient: ${variables.name}`
+        : `Created ingredient: ${variables.name}`;
+      logAuditAction(action, "Ingredients", details, user?.id);
       toast.success(editing ? "Ingredient updated" : "Ingredient added");
     },
     onError: (e) => toast.error(e.message),
@@ -67,9 +75,11 @@ const Ingredients = () => {
       const { error } = await supabase.from("ingredients").delete().eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => {
+    onSuccess: (_, deletedId) => {
       queryClient.invalidateQueries({ queryKey: ["ingredients"] });
       setDeleteConfirm(null);
+      const deletedIngredient = ingredients.find(i => i.id === deletedId);
+      logAuditAction("DELETE", "Ingredients", `Deleted ingredient: ${deletedIngredient?.name || 'Unknown'}`, user?.id);
       toast.success("Ingredient deleted");
     },
     onError: (e) => toast.error(e.message),
