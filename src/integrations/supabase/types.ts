@@ -14,16 +14,433 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      alerts: {
+        Row: {
+          created_at: string
+          id: string
+          item_name: string | null
+          message: string
+          resolved: boolean
+          type: Database["public"]["Enums"]["alert_type"]
+          urgent: boolean
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          item_name?: string | null
+          message: string
+          resolved?: boolean
+          type?: Database["public"]["Enums"]["alert_type"]
+          urgent?: boolean
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          item_name?: string | null
+          message?: string
+          resolved?: boolean
+          type?: Database["public"]["Enums"]["alert_type"]
+          urgent?: boolean
+        }
+        Relationships: []
+      }
+      audit_logs: {
+        Row: {
+          action: string
+          created_at: string
+          details: string | null
+          id: string
+          module: string
+          user_id: string | null
+          user_name: string | null
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          details?: string | null
+          id?: string
+          module: string
+          user_id?: string | null
+          user_name?: string | null
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          details?: string | null
+          id?: string
+          module?: string
+          user_id?: string | null
+          user_name?: string | null
+        }
+        Relationships: []
+      }
+      batches: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          expiration_date: string | null
+          id: string
+          product_id: string
+          production_date: string
+          quantity_planned: number
+          quantity_produced: number
+          status: Database["public"]["Enums"]["batch_status"]
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          expiration_date?: string | null
+          id?: string
+          product_id: string
+          production_date?: string
+          quantity_planned?: number
+          quantity_produced?: number
+          status?: Database["public"]["Enums"]["batch_status"]
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          expiration_date?: string | null
+          id?: string
+          product_id?: string
+          production_date?: string
+          quantity_planned?: number
+          quantity_produced?: number
+          status?: Database["public"]["Enums"]["batch_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "batches_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      defects: {
+        Row: {
+          batch_id: string
+          created_at: string
+          id: string
+          quantity: number
+          reason: string | null
+        }
+        Insert: {
+          batch_id: string
+          created_at?: string
+          id?: string
+          quantity?: number
+          reason?: string | null
+        }
+        Update: {
+          batch_id?: string
+          created_at?: string
+          id?: string
+          quantity?: number
+          reason?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "defects_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "batches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ingredients: {
+        Row: {
+          created_at: string
+          current_stock: number
+          expiration_date: string | null
+          id: string
+          min_stock: number
+          name: string
+          supplier_id: string | null
+          unit: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          current_stock?: number
+          expiration_date?: string | null
+          id?: string
+          min_stock?: number
+          name: string
+          supplier_id?: string | null
+          unit?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          current_stock?: number
+          expiration_date?: string | null
+          id?: string
+          min_stock?: number
+          name?: string
+          supplier_id?: string | null
+          unit?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ingredients_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      products: {
+        Row: {
+          category: string
+          created_at: string
+          expiration_date: string | null
+          id: string
+          min_stock: number
+          name: string
+          quantity: number
+          shelf_life: number | null
+          status: Database["public"]["Enums"]["product_status"]
+          updated_at: string
+          variant: string | null
+        }
+        Insert: {
+          category?: string
+          created_at?: string
+          expiration_date?: string | null
+          id?: string
+          min_stock?: number
+          name: string
+          quantity?: number
+          shelf_life?: number | null
+          status?: Database["public"]["Enums"]["product_status"]
+          updated_at?: string
+          variant?: string | null
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          expiration_date?: string | null
+          id?: string
+          min_stock?: number
+          name?: string
+          quantity?: number
+          shelf_life?: number | null
+          status?: Database["public"]["Enums"]["product_status"]
+          updated_at?: string
+          variant?: string | null
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          full_name: string | null
+          id: string
+          updated_at: string
+          user_id: string
+          username: string | null
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          full_name?: string | null
+          id?: string
+          updated_at?: string
+          user_id: string
+          username?: string | null
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          full_name?: string | null
+          id?: string
+          updated_at?: string
+          user_id?: string
+          username?: string | null
+        }
+        Relationships: []
+      }
+      recipe_ingredients: {
+        Row: {
+          id: string
+          ingredient_id: string
+          quantity: number
+          recipe_id: string
+        }
+        Insert: {
+          id?: string
+          ingredient_id: string
+          quantity?: number
+          recipe_id: string
+        }
+        Update: {
+          id?: string
+          ingredient_id?: string
+          quantity?: number
+          recipe_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recipe_ingredients_ingredient_id_fkey"
+            columns: ["ingredient_id"]
+            isOneToOne: false
+            referencedRelation: "ingredients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recipe_ingredients_recipe_id_fkey"
+            columns: ["recipe_id"]
+            isOneToOne: false
+            referencedRelation: "recipes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      recipes: {
+        Row: {
+          created_at: string
+          id: string
+          name: string | null
+          product_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name?: string | null
+          product_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string | null
+          product_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recipes_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      stock_movements: {
+        Row: {
+          created_at: string
+          id: string
+          item_id: string
+          item_name: string
+          item_type: Database["public"]["Enums"]["movement_item_type"]
+          quantity: number
+          remarks: string | null
+          type: Database["public"]["Enums"]["movement_type"]
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          item_id: string
+          item_name: string
+          item_type: Database["public"]["Enums"]["movement_item_type"]
+          quantity: number
+          remarks?: string | null
+          type: Database["public"]["Enums"]["movement_type"]
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          item_id?: string
+          item_name?: string
+          item_type?: Database["public"]["Enums"]["movement_item_type"]
+          quantity?: number
+          remarks?: string | null
+          type?: Database["public"]["Enums"]["movement_type"]
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      suppliers: {
+        Row: {
+          address: string | null
+          contact: string | null
+          created_at: string
+          email: string | null
+          id: string
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          address?: string | null
+          contact?: string | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          address?: string | null
+          contact?: string | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      alert_type: "low-stock" | "expiring" | "critical"
+      app_role: "admin" | "user"
+      batch_status: "planned" | "in-progress" | "completed"
+      movement_item_type: "ingredient" | "product"
+      movement_type: "IN" | "OUT" | "ADJUSTMENT"
+      product_status: "in-stock" | "low-stock" | "expiring" | "out-of-stock"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +567,13 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      alert_type: ["low-stock", "expiring", "critical"],
+      app_role: ["admin", "user"],
+      batch_status: ["planned", "in-progress", "completed"],
+      movement_item_type: ["ingredient", "product"],
+      movement_type: ["IN", "OUT", "ADJUSTMENT"],
+      product_status: ["in-stock", "low-stock", "expiring", "out-of-stock"],
+    },
   },
 } as const
