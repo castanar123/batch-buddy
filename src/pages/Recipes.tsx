@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Plus, Pencil, Trash2, X } from "lucide-react";
+import { Plus, Pencil, Trash2, X, Upload } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -10,6 +10,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
+import { logAuditAction } from "@/lib/audit";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface RecipeIngredientForm { ingredient_id: string; quantity: number; }
 
@@ -20,7 +22,46 @@ const Recipes = () => {
   const [selectedProduct, setSelectedProduct] = useState("");
   const [recipeIngredients, setRecipeIngredients] = useState<RecipeIngredientForm[]>([]);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [recipeImage, setRecipeImage] = useState("");
+  const [uploadingImage, setUploadingImage] = useState(false);
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+
+  const uploadImage = async (file: File) => {
+    setUploadingImage(true);
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Math.random()}.${fileExt}`;
+      const filePath = `recipes/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('images')
+        .upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      const { data } = supabase.storage
+        .from('images')
+        .getPublicUrl(filePath);
+
+      setUploadingImage(false);
+      return data.publicUrl;
+    } catch (error) {
+      setUploadingImage(false);
+      toast.error('Error uploading image');
+      return null;
+    }
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const imageUrl = await uploadImage(file);
+      if (imageUrl) {
+        setRecipeImage(imageUrl);
+      }
+    }
+  };
 
   const { data: recipes = [], isLoading } = useQuery({
     queryKey: ["recipes-full"],
@@ -47,18 +88,23 @@ const Recipes = () => {
       if (!recipeIngredients.length) throw new Error("Add at least one ingredient");
 
       if (editingId) {
-        await supabase.from("recipes").update({ name: recipeName || null, product_id: selectedProduct }).eq("id", editingId);
+        await supabase.from("recipes").update({ name: recipeName || null, product_id: selectedProduct, image_url: recipeImage || null }).eq("id", editingId);
         await supabase.from("recipe_ingredients").delete().eq("recipe_id", editingId);
         await supabase.from("recipe_ingredients").insert(recipeIngredients.map(ri => ({ recipe_id: editingId, ingredient_id: ri.ingredient_id, quantity: ri.quantity })));
       } else {
-        const { data: recipe, error } = await supabase.from("recipes").insert({ name: recipeName || null, product_id: selectedProduct }).select().single();
+        const { data: recipe, error } = await supabase.from("recipes").insert({ name: recipeName || null, product_id: selectedProduct, image_url: recipeImage || null }).select().single();
         if (error) throw error;
         await supabase.from("recipe_ingredients").insert(recipeIngredients.map(ri => ({ recipe_id: recipe.id, ingredient_id: ri.ingredient_id, quantity: ri.quantity })));
       }
     },
-    onSuccess: () => {
+    onSuccess: (_, __, context) => {
       queryClient.invalidateQueries({ queryKey: ["recipes-full"] });
       closeModal();
+      const action = editingId ? "UPDATE" : "CREATE";
+      const details = editingId
+        ? `Updated recipe: ${recipeName || 'Unnamed'}`
+        : `Created recipe: ${recipeName || 'Unnamed'}`;
+      logAuditAction(action, "Recipes", details, user?.id);
       toast.success(editingId ? "Recipe updated" : "Recipe created");
     },
     onError: (e) => toast.error(e.message),
@@ -70,9 +116,11 @@ const Recipes = () => {
       const { error } = await supabase.from("recipes").delete().eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => {
+    onSuccess: (_, deletedId) => {
       queryClient.invalidateQueries({ queryKey: ["recipes-full"] });
       setDeleteConfirm(null);
+      const deletedRecipe = recipes.find(r => r.id === deletedId);
+      logAuditAction("DELETE", "Recipes", `Deleted recipe: ${deletedRecipe?.name || 'Unnamed'}`, user?.id);
       toast.success("Recipe deleted");
     },
     onError: (e) => toast.error(e.message),
@@ -84,8 +132,18 @@ const Recipes = () => {
     setEditingId(r.id);
     setRecipeName(r.name || "");
     setSelectedProduct(r.product_id);
+    setRecipeImage(r.image_url || "");
     setRecipeIngredients(r.recipe_ingredients?.map((ri: any) => ({ ingredient_id: ri.ingredient_id, quantity: ri.quantity })) || []);
     setModalOpen(true);
+  };
+
+  const closeModal = () => {
+    setModalOpen(false);
+    setEditingId(null);
+    setRecipeName("");
+    setSelectedProduct("");
+    setRecipeImage("");
+    setRecipeIngredients([]);
   };
 
   const addIngredientRow = () => setRecipeIngredients([...recipeIngredients, { ingredient_id: "", quantity: 0 }]);
@@ -116,9 +174,18 @@ const Recipes = () => {
             <Card key={r.id}>
               <CardHeader>
                 <div className="flex justify-between items-start">
-                  <div>
-                    <CardTitle className="font-heading text-xl">{r.products?.name || "Unknown"}</CardTitle>
-                    <p className="text-sm text-muted-foreground">{r.products?.variant} • {r.name || "Default Recipe"}</p>
+                  <div className="flex items-start gap-4">
+                    {r.image_url ? (
+                      <img src={r.image_url} alt={r.name || "Recipe"} className="w-16 h-16 object-cover rounded border" />
+                    ) : (
+                      <div className="w-16 h-16 bg-muted rounded border flex items-center justify-center">
+                        <Upload className="h-6 w-6 text-muted-foreground" />
+                      </div>
+                    )}
+                    <div>
+                      <CardTitle className="font-heading text-xl">{r.products?.name || "Unknown"}</CardTitle>
+                      <p className="text-sm text-muted-foreground">{r.products?.variant} • {r.name || "Default Recipe"}</p>
+                    </div>
                   </div>
                   <div className="flex items-center gap-2">
                     <Badge variant="outline">{r.products?.category}</Badge>
@@ -185,6 +252,25 @@ const Recipes = () => {
                 ))}
                 {recipeIngredients.length === 0 && <p className="text-sm text-muted-foreground">No ingredients added. Click "Add" above.</p>}
               </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs uppercase tracking-wider text-muted-foreground">Recipe Image</Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageUpload}
+                  disabled={uploadingImage}
+                  className="flex-1"
+                />
+                {uploadingImage && <span className="text-sm text-muted-foreground">Uploading...</span>}
+              </div>
+              {recipeImage && (
+                <div className="mt-2">
+                  <img src={recipeImage} alt="Recipe preview" className="w-20 h-20 object-cover rounded border" />
+                </div>
+              )}
             </div>
           </div>
           <DialogFooter>
