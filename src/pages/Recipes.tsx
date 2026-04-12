@@ -126,8 +126,6 @@ const Recipes = () => {
     onError: (e) => toast.error(e.message),
   });
 
-  const closeModal = () => { setModalOpen(false); setEditingId(null); setRecipeName(""); setSelectedProduct(""); setRecipeIngredients([]); };
-
   const openEdit = (r: any) => {
     setEditingId(r.id);
     setRecipeName(r.name || "");
