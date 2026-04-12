@@ -28,7 +28,8 @@ const statusLabels: Record<string, string> = {
   "out-of-stock": "OUT OF STOCK",
 };
 
-const emptyForm = { name: "", category: "Produce", variant: "", shelf_life: 365, quantity: 0, min_stock: 10, status: "in-stock" as const, expiration_date: "" };
+type ProductStatus = "in-stock" | "low-stock" | "expiring" | "out-of-stock";
+const emptyForm = { name: "", category: "Produce", variant: "", shelf_life: 365, quantity: 0, min_stock: 10, status: "in-stock" as ProductStatus, expiration_date: "" };
 
 const Products = () => {
   const [search, setSearch] = useState("");
