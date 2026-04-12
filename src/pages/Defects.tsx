@@ -1,10 +1,24 @@
-import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { toast } from "sonner";
+
+const defectReasons = ["Broken Packaging", "Spoiled Material", "Machine Error", "Contamination", "Label Defect", "Other"];
 
 const Defects = () => {
+  const [modalOpen, setModalOpen] = useState(false);
+  const [batchId, setBatchId] = useState("");
+  const [quantity, setQuantity] = useState(1);
+  const [reason, setReason] = useState("");
+  const queryClient = useQueryClient();
+
   const { data: defects = [], isLoading } = useQuery({
     queryKey: ["defects"],
     queryFn: async () => {
@@ -14,6 +28,27 @@ const Defects = () => {
     },
   });
 
+  const { data: batches = [] } = useQuery({
+    queryKey: ["batches"],
+    queryFn: async () => { const { data } = await supabase.from("batches").select("*, products(name, variant)"); return data || []; },
+  });
+
+  const createMutation = useMutation({
+    mutationFn: async () => {
+      if (!batchId) throw new Error("Select a batch");
+      if (quantity < 1) throw new Error("Quantity must be at least 1");
+      const { error } = await supabase.from("defects").insert({ batch_id: batchId, quantity, reason: reason || null });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["defects"] });
+      setModalOpen(false);
+      setBatchId(""); setQuantity(1); setReason("");
+      toast.success("Defect logged successfully");
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
@@ -21,7 +56,7 @@ const Defects = () => {
           <h1 className="font-heading text-3xl font-bold text-foreground">Defects & Wastage</h1>
           <p className="text-muted-foreground mt-1">Track defective items and production wastage.</p>
         </div>
-        <Button className="bg-primary hover:bg-primary/90 text-primary-foreground gap-2"><Plus className="h-4 w-4" /> Log Defect</Button>
+        <Button onClick={() => setModalOpen(true)} className="bg-primary hover:bg-primary/90 text-primary-foreground gap-2"><Plus className="h-4 w-4" /> Log Defect</Button>
       </div>
       <Card>
         <CardContent className="p-0 overflow-x-auto">
@@ -51,6 +86,47 @@ const Defects = () => {
           )}
         </CardContent>
       </Card>
+
+      {/* Log Defect Modal */}
+      <Dialog open={modalOpen} onOpenChange={setModalOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle className="font-heading">Log Defect</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <Label className="text-xs uppercase tracking-wider text-muted-foreground">Batch *</Label>
+              <Select value={batchId} onValueChange={setBatchId}>
+                <SelectTrigger><SelectValue placeholder="Select batch" /></SelectTrigger>
+                <SelectContent>
+                  {batches.map((b: any) => (
+                    <SelectItem key={b.id} value={b.id}>
+                      {b.products?.name || "Unknown"} — Batch {b.id.slice(0, 8)} ({b.quantity_produced} produced)
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs uppercase tracking-wider text-muted-foreground">Qty Defective *</Label>
+              <Input type="number" min="1" value={quantity} onChange={e => setQuantity(Math.max(1, Number(e.target.value)))} />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs uppercase tracking-wider text-muted-foreground">Reason</Label>
+              <Select value={reason} onValueChange={setReason}>
+                <SelectTrigger><SelectValue placeholder="Select reason" /></SelectTrigger>
+                <SelectContent>
+                  {defectReasons.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setModalOpen(false)}>Cancel</Button>
+            <Button onClick={() => createMutation.mutate()} disabled={createMutation.isPending} className="bg-primary text-primary-foreground">
+              {createMutation.isPending ? "Saving..." : "Log Defect"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

@@ -1,12 +1,29 @@
-import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { ArrowDown, ArrowUp, RefreshCw } from "lucide-react";
+import { ArrowDown, ArrowUp, RefreshCw, Plus } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { toast } from "sonner";
+import type { Enums } from "@/integrations/supabase/types";
 
 const typeIcons = { IN: ArrowDown, OUT: ArrowUp, ADJUSTMENT: RefreshCw };
 const typeStyles = { IN: "text-success", OUT: "text-destructive", ADJUSTMENT: "text-warning" };
 
 const StockMovements = () => {
+  const [modalOpen, setModalOpen] = useState(false);
+  const [moveType, setMoveType] = useState<Enums<"movement_type">>("IN");
+  const [itemType, setItemType] = useState<Enums<"movement_item_type">>("ingredient");
+  const [itemId, setItemId] = useState("");
+  const [qty, setQty] = useState(1);
+  const [remarks, setRemarks] = useState("");
+  const queryClient = useQueryClient();
+
   const { data: movements = [], isLoading } = useQuery({
     queryKey: ["stock_movements"],
     queryFn: async () => {
@@ -16,11 +33,69 @@ const StockMovements = () => {
     },
   });
 
+  const { data: ingredients = [] } = useQuery({
+    queryKey: ["ingredients"],
+    queryFn: async () => { const { data } = await supabase.from("ingredients").select("*"); return data || []; },
+  });
+
+  const { data: products = [] } = useQuery({
+    queryKey: ["products"],
+    queryFn: async () => { const { data } = await supabase.from("products").select("*"); return data || []; },
+  });
+
+  const items = itemType === "ingredient" ? ingredients : products;
+  const getItemName = () => {
+    const item = items.find((i: any) => i.id === itemId);
+    return item?.name || "";
+  };
+
+  const createMutation = useMutation({
+    mutationFn: async () => {
+      if (!itemId) throw new Error("Select an item");
+      if (qty <= 0) throw new Error("Quantity must be positive");
+      const name = getItemName();
+      const actualQty = moveType === "OUT" ? -qty : qty;
+
+      const { error } = await supabase.from("stock_movements").insert({
+        type: moveType, item_type: itemType, item_id: itemId,
+        item_name: name, quantity: actualQty, remarks: remarks || null,
+      });
+      if (error) throw error;
+
+      // Update stock
+      if (itemType === "ingredient") {
+        const ing = ingredients.find(i => i.id === itemId);
+        if (ing) {
+          const newStock = Math.max(0, ing.current_stock + actualQty);
+          await supabase.from("ingredients").update({ current_stock: newStock }).eq("id", itemId);
+        }
+      } else {
+        const prod = products.find(p => p.id === itemId);
+        if (prod) {
+          const newQty = Math.max(0, prod.quantity + actualQty);
+          await supabase.from("products").update({ quantity: newQty }).eq("id", itemId);
+        }
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["stock_movements"] });
+      queryClient.invalidateQueries({ queryKey: ["ingredients"] });
+      queryClient.invalidateQueries({ queryKey: ["products"] });
+      setModalOpen(false);
+      setItemId(""); setQty(1); setRemarks("");
+      toast.success("Stock movement recorded");
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
   return (
     <div className="space-y-6 animate-fade-in">
-      <div>
-        <h1 className="font-heading text-3xl font-bold text-foreground">Stock Movements</h1>
-        <p className="text-muted-foreground mt-1">Complete ledger of all inventory transactions.</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="font-heading text-3xl font-bold text-foreground">Stock Movements</h1>
+          <p className="text-muted-foreground mt-1">Complete ledger of all inventory transactions.</p>
+        </div>
+        <Button onClick={() => setModalOpen(true)} className="bg-primary hover:bg-primary/90 text-primary-foreground gap-2"><Plus className="h-4 w-4" /> New Movement</Button>
       </div>
       <Card>
         <CardContent className="p-0 overflow-x-auto">
@@ -30,7 +105,7 @@ const StockMovements = () => {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-border">
-                  {["Type", "Item", "Quantity", "Date", "Remarks"].map(h => (
+                  {["Type", "Item", "Category", "Quantity", "Date", "Remarks"].map(h => (
                     <th key={h} className="text-left p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">{h}</th>
                   ))}
                 </tr>
@@ -46,6 +121,7 @@ const StockMovements = () => {
                         </span>
                       </td>
                       <td className="p-4 text-sm text-foreground">{m.item_name}</td>
+                      <td className="p-4"><span className="text-xs font-medium px-2 py-0.5 rounded bg-muted text-muted-foreground">{m.item_type}</span></td>
                       <td className="p-4 text-sm font-medium text-foreground">{m.quantity > 0 ? `+${m.quantity}` : m.quantity}</td>
                       <td className="p-4 text-sm text-muted-foreground">{new Date(m.created_at).toLocaleString()}</td>
                       <td className="p-4 text-sm text-muted-foreground">{m.remarks || "-"}</td>
@@ -57,6 +133,61 @@ const StockMovements = () => {
           )}
         </CardContent>
       </Card>
+
+      {/* Manual Stock Movement Modal */}
+      <Dialog open={modalOpen} onOpenChange={setModalOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle className="font-heading">Record Stock Movement</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label className="text-xs uppercase tracking-wider text-muted-foreground">Movement Type</Label>
+                <Select value={moveType} onValueChange={(v: any) => setMoveType(v)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="IN">Stock In</SelectItem>
+                    <SelectItem value="OUT">Stock Out</SelectItem>
+                    <SelectItem value="ADJUSTMENT">Adjustment</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs uppercase tracking-wider text-muted-foreground">Item Type</Label>
+                <Select value={itemType} onValueChange={(v: any) => { setItemType(v); setItemId(""); }}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ingredient">Ingredient</SelectItem>
+                    <SelectItem value="product">Product</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs uppercase tracking-wider text-muted-foreground">Item *</Label>
+              <Select value={itemId} onValueChange={setItemId}>
+                <SelectTrigger><SelectValue placeholder="Select item" /></SelectTrigger>
+                <SelectContent>
+                  {items.map((i: any) => <SelectItem key={i.id} value={i.id}>{i.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs uppercase tracking-wider text-muted-foreground">Quantity *</Label>
+              <Input type="number" min="1" value={qty} onChange={e => setQty(Math.max(1, Number(e.target.value)))} />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs uppercase tracking-wider text-muted-foreground">Remarks</Label>
+              <Textarea value={remarks} onChange={e => setRemarks(e.target.value)} placeholder="Optional notes..." rows={2} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setModalOpen(false)}>Cancel</Button>
+            <Button onClick={() => createMutation.mutate()} disabled={createMutation.isPending} className="bg-primary text-primary-foreground">
+              {createMutation.isPending ? "Saving..." : "Record Movement"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
