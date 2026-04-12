@@ -9,6 +9,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import type { Tables } from "@/integrations/supabase/types";
+import { logAuditAction } from "@/lib/audit";
+import { useAuth } from "@/contexts/AuthContext";
 
 type Supplier = Tables<"suppliers">;
 const emptyForm = { name: "", contact: "", email: "", address: "" };
@@ -20,6 +22,7 @@ const Suppliers = () => {
   const [form, setForm] = useState(emptyForm);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const queryClient = useQueryClient();
+  const { user } = useAuth();
 
   const { data: suppliers = [], isLoading } = useQuery({
     queryKey: ["suppliers"],
@@ -40,9 +43,14 @@ const Suppliers = () => {
         if (error) throw error;
       }
     },
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["suppliers"] });
       setModalOpen(false); setEditing(null); setForm(emptyForm);
+      const action = variables.id ? "UPDATE" : "CREATE";
+      const details = variables.id
+        ? `Updated supplier: ${variables.name}`
+        : `Created supplier: ${variables.name}`;
+      logAuditAction(action, "Suppliers", details, user?.id);
       toast.success(editing ? "Supplier updated" : "Supplier added");
     },
     onError: (e) => toast.error(e.message),
@@ -53,9 +61,11 @@ const Suppliers = () => {
       const { error } = await supabase.from("suppliers").delete().eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => {
+    onSuccess: (_, deletedId) => {
       queryClient.invalidateQueries({ queryKey: ["suppliers"] });
       setDeleteConfirm(null);
+      const deletedSupplier = suppliers.find(s => s.id === deletedId);
+      logAuditAction("DELETE", "Suppliers", `Deleted supplier: ${deletedSupplier?.name || 'Unknown'}`, user?.id);
       toast.success("Supplier deleted");
     },
     onError: (e) => toast.error(e.message),

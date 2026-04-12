@@ -11,6 +11,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import type { Tables, TablesInsert } from "@/integrations/supabase/types";
+import { logAuditAction } from "@/lib/audit";
+import { useAuth } from "@/contexts/AuthContext";
 
 type Product = Tables<"products">;
 
@@ -39,6 +41,7 @@ const Products = () => {
   const [form, setForm] = useState(emptyForm);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const queryClient = useQueryClient();
+  const { user } = useAuth();
 
   const { data: products = [], isLoading } = useQuery({
     queryKey: ["products"],
@@ -59,11 +62,16 @@ const Products = () => {
         if (error) throw error;
       }
     },
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["products"] });
       setModalOpen(false);
       setEditingProduct(null);
       setForm(emptyForm);
+      const action = variables.id ? "UPDATE" : "CREATE";
+      const details = variables.id
+        ? `Updated product: ${variables.name}`
+        : `Created product: ${variables.name}`;
+      logAuditAction(action, "Products", details, user?.id);
       toast.success(editingProduct ? "Product updated" : "Product added");
     },
     onError: (e) => toast.error(e.message),
@@ -74,9 +82,11 @@ const Products = () => {
       const { error } = await supabase.from("products").delete().eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => {
+    onSuccess: (_, deletedId) => {
       queryClient.invalidateQueries({ queryKey: ["products"] });
       setDeleteConfirm(null);
+      const deletedProduct = products.find(p => p.id === deletedId);
+      logAuditAction("DELETE", "Products", `Deleted product: ${deletedProduct?.name || 'Unknown'}`, user?.id);
       toast.success("Product deleted");
     },
     onError: (e) => toast.error(e.message),
