@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Search, Plus, Pencil, Trash2 } from "lucide-react";
+import { Search, Plus, Pencil, Trash2, Upload } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -31,7 +31,7 @@ const statusLabels: Record<string, string> = {
 };
 
 type ProductStatus = "in-stock" | "low-stock" | "expiring" | "out-of-stock";
-const emptyForm = { name: "", category: "Produce", variant: "", shelf_life: 365, quantity: 0, min_stock: 10, status: "in-stock" as ProductStatus, expiration_date: "" };
+const emptyForm = { name: "", category: "Produce", variant: "", shelf_life: 365, quantity: 0, min_stock: 10, status: "in-stock" as ProductStatus, expiration_date: "", image_url: "" };
 
 const Products = () => {
   const [search, setSearch] = useState("");
@@ -40,8 +40,45 @@ const Products = () => {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
   const queryClient = useQueryClient();
   const { user } = useAuth();
+
+  const uploadImage = async (file: File) => {
+    setUploadingImage(true);
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Math.random()}.${fileExt}`;
+      const filePath = `products/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('images')
+        .upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      const { data } = supabase.storage
+        .from('images')
+        .getPublicUrl(filePath);
+
+      setUploadingImage(false);
+      return data.publicUrl;
+    } catch (error) {
+      setUploadingImage(false);
+      toast.error('Error uploading image');
+      return null;
+    }
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const imageUrl = await uploadImage(file);
+      if (imageUrl) {
+        setForm(prev => ({ ...prev, image_url: imageUrl }));
+      }
+    }
+  };
 
   const { data: products = [], isLoading } = useQuery({
     queryKey: ["products"],
@@ -97,6 +134,7 @@ const Products = () => {
     setForm({
       name: p.name, category: p.category, variant: p.variant || "", shelf_life: p.shelf_life || 365,
       quantity: p.quantity, min_stock: p.min_stock, status: p.status, expiration_date: p.expiration_date || "",
+      image_url: p.image_url || "",
     });
     setModalOpen(true);
   };
@@ -114,6 +152,7 @@ const Products = () => {
       name: form.name.trim(), category: form.category, variant: form.variant || null,
       shelf_life: form.shelf_life, quantity: form.quantity, min_stock: form.min_stock,
       status: form.status, expiration_date: form.expiration_date || null,
+      image_url: form.image_url || null,
     };
     if (editingProduct) payload.id = editingProduct.id;
     upsertMutation.mutate(payload);
@@ -184,6 +223,7 @@ const Products = () => {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-border">
+                    <th className="text-left p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Image</th>
                     <th className="text-left p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Product Name</th>
                     <th className="text-left p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Category</th>
                     <th className="text-left p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Quantity</th>
@@ -195,6 +235,15 @@ const Products = () => {
                 <tbody>
                   {filtered.map((p) => (
                     <tr key={p.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
+                      <td className="p-4">
+                        {p.image_url ? (
+                          <img src={p.image_url} alt={p.name} className="w-12 h-12 object-cover rounded border" />
+                        ) : (
+                          <div className="w-12 h-12 bg-muted rounded border flex items-center justify-center">
+                            <Upload className="h-4 w-4 text-muted-foreground" />
+                          </div>
+                        )}
+                      </td>
                       <td className="p-4">
                         <p className="text-sm font-medium text-foreground">{p.name} {p.variant ? `(${p.variant})` : ""}</p>
                       </td>
@@ -270,6 +319,24 @@ const Products = () => {
                 <Label className="text-xs uppercase tracking-wider text-muted-foreground">Expiration Date</Label>
                 <Input type="date" value={form.expiration_date} onChange={(e) => setForm({ ...form, expiration_date: e.target.value })} />
               </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs uppercase tracking-wider text-muted-foreground">Product Image</Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageUpload}
+                  disabled={uploadingImage}
+                  className="flex-1"
+                />
+                {uploadingImage && <span className="text-sm text-muted-foreground">Uploading...</span>}
+              </div>
+              {form.image_url && (
+                <div className="mt-2">
+                  <img src={form.image_url} alt="Product preview" className="w-20 h-20 object-cover rounded border" />
+                </div>
+              )}
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setModalOpen(false)}>Cancel</Button>

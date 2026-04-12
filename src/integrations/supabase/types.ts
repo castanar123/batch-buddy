@@ -203,6 +203,7 @@ export type Database = {
           created_at: string
           expiration_date: string | null
           id: string
+          image_url: string | null
           min_stock: number
           name: string
           quantity: number
@@ -216,6 +217,7 @@ export type Database = {
           created_at?: string
           expiration_date?: string | null
           id?: string
+          image_url?: string | null
           min_stock?: number
           name: string
           quantity?: number
@@ -229,6 +231,7 @@ export type Database = {
           created_at?: string
           expiration_date?: string | null
           id?: string
+          image_url?: string | null
           min_stock?: number
           name?: string
           quantity?: number
@@ -309,6 +312,7 @@ export type Database = {
         Row: {
           created_at: string
           id: string
+          image_url: string | null
           name: string | null
           product_id: string
           updated_at: string
@@ -316,6 +320,7 @@ export type Database = {
         Insert: {
           created_at?: string
           id?: string
+          image_url?: string | null
           name?: string | null
           product_id: string
           updated_at?: string
@@ -323,6 +328,7 @@ export type Database = {
         Update: {
           created_at?: string
           id?: string
+          image_url?: string | null
           name?: string | null
           product_id?: string
           updated_at?: string
