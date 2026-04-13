@@ -41,6 +41,7 @@ const Products = () => {
   const [form, setForm] = useState(emptyForm);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [selectedBatches, setSelectedBatches] = useState<Record<string, string>>({});
   const queryClient = useQueryClient();
   const { user } = useAuth();
 
@@ -86,6 +87,15 @@ const Products = () => {
       const { data, error } = await supabase.from("products").select("*").order("created_at", { ascending: false });
       if (error) throw error;
       return data;
+    },
+  });
+
+  const { data: batches = [] } = useQuery({
+    queryKey: ["batches"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("batches").select("*").order("created_at", { ascending: false });
+      if (error) throw error;
+      return data || [];
     },
   });
 
@@ -225,6 +235,7 @@ const Products = () => {
                   <tr className="border-b border-border">
                     <th className="text-left p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Image</th>
                     <th className="text-left p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Product Name</th>
+                    <th className="text-left p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Batch</th>
                     <th className="text-left p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Category</th>
                     <th className="text-left p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Quantity</th>
                     <th className="text-left p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Expiration Date</th>
@@ -233,37 +244,62 @@ const Products = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map((p) => (
-                    <tr key={p.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
-                      <td className="p-4">
-                        {p.image_url ? (
-                          <img src={p.image_url} alt={p.name} className="w-12 h-12 object-cover rounded border" />
-                        ) : (
-                          <div className="w-12 h-12 bg-muted rounded border flex items-center justify-center">
-                            <Upload className="h-4 w-4 text-muted-foreground" />
+                  {filtered.map((p) => {
+                    const productBatches = batches.filter((b: any) => b.product_id === p.id) || [];
+                    const selectedBatchId = selectedBatches[p.id];
+                    const selectedBatch = productBatches.find((b: any) => b.id === selectedBatchId);
+                    const displayQuantity = selectedBatch ? selectedBatch.quantity_produced : p.quantity;
+                    const displayExpiration = selectedBatch ? selectedBatch.expiration_date : p.expiration_date;
+                    return (
+                      <tr key={p.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
+                        <td className="p-4">
+                          {p.image_url ? (
+                            <img src={p.image_url} alt={p.name} className="w-12 h-12 object-cover rounded border" />
+                          ) : (
+                            <div className="w-12 h-12 bg-muted rounded border flex items-center justify-center">
+                              <Upload className="h-4 w-4 text-muted-foreground" />
+                            </div>
+                          )}
+                        </td>
+                        <td className="p-4">
+                          <p className="text-sm font-medium text-foreground">{p.name} {p.variant ? `(${p.variant})` : ""}</p>
+                        </td>
+                        <td className="p-4">
+                          {productBatches && productBatches.length > 0 ? (
+                            <Select value={selectedBatchId || ""} onValueChange={(value) => setSelectedBatches(prev => ({ ...prev, [p.id]: value })) }>
+                              <SelectTrigger className="w-32 h-8">
+                                <SelectValue placeholder="Select batch" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {productBatches.map((b: any) => (
+                                  <SelectItem key={b.id} value={b.id}>
+                                    {b.id.slice(0, 8)} ({b.quantity_produced})
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          ) : (
+                            <span className="text-sm text-muted-foreground">No batches</span>
+                          )}
+                        </td>
+                        <td className="p-4"><Badge variant="outline" className="text-xs font-normal">{p.category}</Badge></td>
+                        <td className="p-4 text-sm font-medium text-foreground">{displayQuantity} Units</td>
+                        <td className="p-4 text-sm text-muted-foreground">{displayExpiration ? new Date(displayExpiration).toLocaleDateString() : "-"}</td>
+                        <td className="p-4">
+                          <span className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full border ${statusStyles[p.status]}`}>
+                            <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                            {statusLabels[p.status]}
+                          </span>
+                        </td>
+                        <td className="p-4">
+                          <div className="flex items-center gap-2">
+                            <button onClick={() => openEdit(p)} className="text-muted-foreground hover:text-foreground transition-colors"><Pencil className="h-4 w-4" /></button>
+                            <button onClick={() => setDeleteConfirm(p.id)} className="text-muted-foreground hover:text-destructive transition-colors"><Trash2 className="h-4 w-4" /></button>
                           </div>
-                        )}
-                      </td>
-                      <td className="p-4">
-                        <p className="text-sm font-medium text-foreground">{p.name} {p.variant ? `(${p.variant})` : ""}</p>
-                      </td>
-                      <td className="p-4"><Badge variant="outline" className="text-xs font-normal">{p.category}</Badge></td>
-                      <td className="p-4 text-sm font-medium text-foreground">{p.quantity} Units</td>
-                      <td className="p-4 text-sm text-muted-foreground">{p.expiration_date ? new Date(p.expiration_date).toLocaleDateString() : "-"}</td>
-                      <td className="p-4">
-                        <span className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full border ${statusStyles[p.status]}`}>
-                          <span className="h-1.5 w-1.5 rounded-full bg-current" />
-                          {statusLabels[p.status]}
-                        </span>
-                      </td>
-                      <td className="p-4">
-                        <div className="flex items-center gap-2">
-                          <button onClick={() => openEdit(p)} className="text-muted-foreground hover:text-foreground transition-colors"><Pencil className="h-4 w-4" /></button>
-                          <button onClick={() => setDeleteConfirm(p.id)} className="text-muted-foreground hover:text-destructive transition-colors"><Trash2 className="h-4 w-4" /></button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
