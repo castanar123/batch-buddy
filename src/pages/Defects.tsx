@@ -37,11 +37,21 @@ const Defects = () => {
     mutationFn: async () => {
       if (!batchId) throw new Error("Select a batch");
       if (quantity < 1) throw new Error("Quantity must be at least 1");
-      const { error } = await supabase.from("defects").insert({ batch_id: batchId, quantity, reason: reason || null });
-      if (error) throw error;
+      // Get current batch
+      const { data: batch, error: fetchError } = await supabase.from("batches").select("quantity_produced").eq("id", batchId).single();
+      if (fetchError) throw fetchError;
+      if (!batch) throw new Error("Batch not found");
+      const newQuantity = Math.max(0, batch.quantity_produced - quantity);
+      // Insert the defect
+      const { error: defectError } = await supabase.from("defects").insert({ batch_id: batchId, quantity, reason: reason || null });
+      if (defectError) throw defectError;
+      // Update the batch to deduct the defective quantity from produced
+      const { error: batchError } = await supabase.from("batches").update({ quantity_produced: newQuantity }).eq("id", batchId);
+      if (batchError) throw batchError;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["defects"] });
+      queryClient.invalidateQueries({ queryKey: ["batches"] });
       setModalOpen(false);
       setBatchId(""); setQuantity(1); setReason("");
       toast.success("Defect logged successfully");
