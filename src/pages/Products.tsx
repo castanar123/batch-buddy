@@ -42,6 +42,7 @@ const Products = () => {
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [selectedBatches, setSelectedBatches] = useState<Record<string, string>>({});
+  const [hoveredBatch, setHoveredBatch] = useState<string | null>(null);
   const queryClient = useQueryClient();
   const { user } = useAuth();
 
@@ -246,10 +247,11 @@ const Products = () => {
                 <tbody>
                   {filtered.map((p) => {
                     const productBatches = batches.filter((b: any) => b.product_id === p.id) || [];
-                    const selectedBatchId = selectedBatches[p.id];
-                    const selectedBatch = productBatches.find((b: any) => b.id === selectedBatchId);
-                    const displayQuantity = selectedBatch ? selectedBatch.quantity_produced : p.quantity;
-                    const displayExpiration = selectedBatch ? selectedBatch.expiration_date : p.expiration_date;
+                    const hoveredBatchKey = hoveredBatch && hoveredBatch.startsWith(p.id) ? hoveredBatch : null;
+                    const hoveredBatchId = hoveredBatchKey ? hoveredBatchKey.replace(`${p.id}-`, '') : null;
+                    const displayBatch = hoveredBatchId ? productBatches.find((b: any) => b.id === hoveredBatchId) : null;
+                    const displayQuantity = displayBatch ? displayBatch.quantity_produced : p.quantity;
+                    const displayExpiration = displayBatch ? displayBatch.expiration_date : p.expiration_date;
                     return (
                       <tr key={p.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
                         <td className="p-4">
@@ -266,18 +268,25 @@ const Products = () => {
                         </td>
                         <td className="p-4">
                           {productBatches && productBatches.length > 0 ? (
-                            <Select value={selectedBatchId || ""} onValueChange={(value) => setSelectedBatches(prev => ({ ...prev, [p.id]: value })) }>
-                              <SelectTrigger className="w-32 h-8">
-                                <SelectValue placeholder="Select batch" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {productBatches.map((b: any) => (
-                                  <SelectItem key={b.id} value={b.id}>
-                                    {b.id.slice(0, 8)} ({b.quantity_produced})
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
+                            <div className="flex flex-wrap gap-2">
+                              {productBatches.map((b: any, idx: number) => {
+                                const batchKey = `${p.id}-${b.id}`;
+                                return (
+                                  <button
+                                    key={b.id}
+                                    onMouseEnter={() => setHoveredBatch(batchKey)}
+                                    onMouseLeave={() => setHoveredBatch(null)}
+                                    className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
+                                      hoveredBatch === batchKey
+                                        ? 'bg-primary text-primary-foreground'
+                                        : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                                    }`}
+                                  >
+                                    Batch #{idx + 1}
+                                  </button>
+                                );
+                              })}
+                            </div>
                           ) : (
                             <span className="text-sm text-muted-foreground">No batches</span>
                           )}
